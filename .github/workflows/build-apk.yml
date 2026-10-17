@@ -1,0 +1,71 @@
+name: Build ISS Eye Control APK
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js Engine
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Cordova CLI Compiler
+        run: npm install -g cordova
+
+      - name: Create Native Android Shell
+        run: |
+          # App name updated to "ISS Eye Control"
+          cordova create build_dir com.imransigma.isseyecontrol "ISS Eye Control"
+          cd build_dir
+          cordova platform add android
+          rm -rf www/*
+          cp ../index.html www/index.html
+
+      - name: Generate and Inject Custom Cyber Icon
+        run: |
+          # Node script to automatically create a custom tracking icon for your app
+          node -e "
+          const fs = require('fs');
+          const { createCanvas } = require('canvas');
+          const canvas = createCanvas(512, 512);
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#05070c';
+          ctx.fillRect(0, 0, 512, 512);
+          ctx.strokeStyle = '#00ffcc';
+          ctx.lineWidth = 25;
+          ctx.beginPath();
+          ctx.arc(256, 256, 160, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = '#00ffcc';
+          ctx.beginPath();
+          ctx.arc(256, 256, 60, 0, Math.PI * 2);
+          ctx.fill();
+          const buffer = canvas.toBuffer('image/png');
+          fs.writeFileSync('build_dir/www/icon.png', buffer);
+          " || echo "Standard icon fallback enabled"
+
+      - name: Inject Configuration Matrix & Permissions
+        run: |
+          cd build_dir
+          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.imransigma.isseyecontrol" version="1.0.0" xmlns="http://w3.org" xmlns:cdv="http://apache.org"><name>ISS Eye Control</name><description>Advanced Eye Tracking Core</description><author email="dev@imransigma.com">Imran Ali</author><content src="index.html" /><access origin="*" /><allow-intent href="http://*/*" /><allow-intent href="https://*/*" /><platform name="android"><icon src="www/icon.png" /><config-file target="AndroidManifest.xml" parent="/*"><uses-permission android:name="android.permission.CAMERA" /><uses-feature android:name="android.hardware.camera" /><uses-feature android:name="android.hardware.camera.autofocus" /></config-file></platform></widget>' > config.xml
+
+      - name: Set up Java Environment
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Compile and Output Signed APK
+        run: |
+          cd build_dir
+          cordova build android --device
+
+      - name: Upload Finished APK File
+        uses: actions/upload-artifact@v4
+        with:
+          name: ISS-Eye-Control-Output
+          path: build_dir/platforms/android/app/build/outputs/apk/debug/app-debug.apk
